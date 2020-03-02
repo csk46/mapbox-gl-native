@@ -32,6 +32,10 @@ public:
         delegate.invoke(&RendererObserver::onDidFinishRenderingFrame, mode, repaintNeeded, placementChanged);
     }
 
+    void onStyleImageMissing(const std::string& image, StyleImageMissingCallback cb) override {
+        delegate.invoke(&RendererObserver::onStyleImageMissing, image, std::move(cb));
+    }
+
 private:
     std::shared_ptr<Mailbox> mailbox;
     ActorRef<RendererObserver> delegate;
@@ -122,35 +126,19 @@ private:
     const std::unique_ptr<util::Thread<SnapshotterRenderer>> renderer;
 };
 
-class MapSnapshotter::Impl {
+class MapSnapshotter::Impl final : public MapObserver {
 public:
-    Impl(std::pair<bool, std::string> style,
-         Size size,
+    Impl(Size size,
          float pixelRatio,
-         optional<CameraOptions> cameraOptions,
-         optional<LatLngBounds> region,
-         optional<std::string> localFontFamily,
-         const ResourceOptions& resourceOptions)
-        : frontend(size, pixelRatio, std::move(localFontFamily)),
+         const ResourceOptions& resourceOptions,
+         MapSnapshotterObserver& observer_,
+         optional<std::string> localFontFamily)
+        : observer(observer_),
+          frontend(size, pixelRatio, std::move(localFontFamily)),
           map(frontend,
-              MapObserver::nullObserver(),
+              *this,
               MapOptions().withMapMode(MapMode::Static).withSize(size).withPixelRatio(pixelRatio),
-              resourceOptions) {
-        if (style.first) {
-            map.getStyle().loadJSON(style.second);
-        } else {
-            map.getStyle().loadURL(style.second);
-        }
-
-        if (cameraOptions) {
-            map.jumpTo(*cameraOptions);
-        }
-
-        // Set region, if specified
-        if (region) {
-            setRegion(*region);
-        }
-    }
+              resourceOptions) {}
 
     void setRegion(const LatLngBounds& region) {
         mbgl::EdgeInsets insets = {0, 0, 0, 0};
@@ -226,6 +214,11 @@ public:
         });
     }
 
+    // MapObserver overrides
+    void onDidFailLoadingMap(MapLoadError, const std::string& error) override { observer.onDidFailLoadingStyle(error); }
+    void onDidFinishLoadingStyle() override { observer.onDidFinishLoadingStyle(); }
+    void onStyleImageMissing(const std::string& image) override { observer.onStyleImageMissing(image); }
+
     Map& getMap() { return map; }
     const Map& getMap() const { return map; }
     SnapshotterRendererFrontend& getRenderer() { return frontend; }
@@ -233,24 +226,21 @@ public:
 
 private:
     std::unique_ptr<Actor<MapSnapshotter::Callback>> renderStillCallback;
+    MapSnapshotterObserver& observer;
     SnapshotterRendererFrontend frontend;
     Map map;
 };
 
-MapSnapshotter::MapSnapshotter(std::pair<bool, std::string> style,
-                               Size size,
+MapSnapshotter::MapSnapshotter(Size size,
                                float pixelRatio,
-                               optional<CameraOptions> cameraOptions,
-                               optional<LatLngBounds> region,
-                               optional<std::string> localFontFamily,
-                               const ResourceOptions& resourceOptions)
-    : impl(std::make_unique<MapSnapshotter::Impl>(std::move(style),
-                                                  size,
-                                                  pixelRatio,
-                                                  std::move(cameraOptions),
-                                                  std::move(region),
-                                                  localFontFamily,
-                                                  resourceOptions.clone())) {}
+                               const ResourceOptions& resourceOptions,
+                               MapSnapshotterObserver& observer,
+                               optional<std::string> localFontFamily)
+    : impl(std::make_unique<MapSnapshotter::Impl>(
+          size, pixelRatio, resourceOptions, observer, std::move(localFontFamily))) {}
+
+MapSnapshotter::MapSnapshotter(Size size, float pixelRatio, const ResourceOptions& resourceOptions)
+    : MapSnapshotter(size, pixelRatio, resourceOptions, MapSnapshotterObserver::nullObserver()) {}
 
 MapSnapshotter::~MapSnapshotter() = default;
 
