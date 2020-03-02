@@ -12,6 +12,7 @@ add_library(
     ${PROJECT_SOURCE_DIR}/test/geometry/dem_data.test.cpp
     ${PROJECT_SOURCE_DIR}/test/geometry/line_atlas.test.cpp
     ${PROJECT_SOURCE_DIR}/test/map/map.test.cpp
+    ${PROJECT_SOURCE_DIR}/test/map/map_snapshotter.test.cpp
     ${PROJECT_SOURCE_DIR}/test/map/prefetch.test.cpp
     ${PROJECT_SOURCE_DIR}/test/map/transform.test.cpp
     ${PROJECT_SOURCE_DIR}/test/math/clamp.test.cpp
@@ -103,6 +104,12 @@ add_library(
     ${PROJECT_SOURCE_DIR}/test/util/timer.test.cpp
     ${PROJECT_SOURCE_DIR}/test/util/token.test.cpp
     ${PROJECT_SOURCE_DIR}/test/util/url.test.cpp
+)
+
+# Required for map_snapshotter.test.cpp unit tests.
+target_sources(
+    mbgl-test
+    PRIVATE ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/map/map_snapshotter.cpp
 )
 
 if(MBGL_WITH_OPENGL)
